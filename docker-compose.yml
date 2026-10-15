@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  phanthycode2api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: phanthycode2api:latest
+    container_name: phanthycode2api
+    restart: unless-stopped
+    ports:
+      # 冒号左边是宿主机端口，右边是容器内端口；改端口只需在 .env 里设 P2A_PORT
+      - "${P2A_PORT:-7864}:${P2A_PORT:-7864}"
+    environment:
+      # ---- 基础 ----
+      P2A_LISTEN: ":${P2A_PORT:-7864}"   # 监听端口跟随 P2A_PORT，与 healthcheck 口径一致
+      # P2A_API_KEY: "your-secret-key"   # 设置后开启 Bearer 鉴权；留空=不鉴权。对外暴露务必设置
+      P2A_AUTH_DIR: "./auths"
+      P2A_STATE_FILE: "./data/state.json"
+      P2A_CLAIMS_FILE: "./data/claims.json"
+      P2A_BASE_URL: "https://code.phanthy.com"
+      P2A_TIMEOUT_SECONDS: "600"        # 含流式读取的总超时，别用 120 会掐断长回答
+
+      # ---- 代理（一号一 IP，账号安全第一道防线）----
+      # 全局默认代理；Resin 等代理池写：http://Platform.Account:token@host:port
+      # P2A_PROXY_URL: "http://Default.phanthy_acc1:token@resin-host:8080"
+      # 账号级代理（覆盖全局），格式 uid1=url1,uid2=url2
+      # P2A_PROXY_BY_ACCOUNT: "acc1=http://Default.acc1:t@host:8080,acc2=http://Default.acc2:t@host:8080"
+      # 若容器走宿主机上的代理（如 127.0.0.1 的 Resin），下面两行用 host 网络或加：
+      # extra_hosts: ["host.docker.internal:host-gateway"]
+
+      # ---- 每日签到领积分 ----
+      P2A_CLAIM_HOURS: "8"             # 每天 8 点签到（带 0-15 分钟随机抖动）；off = 关闭
+      # ---- 账号安全加固 ----
+      P2A_DAILY_LIMIT: "0"             # 每账号每日请求上限，0=不限
+      P2A_CONCURRENCY: "1"             # 每账号并发上限（强烈建议 1）
+      P2A_JITTER_MAX: "300ms"          # 派发前随机抖动，拟人化
+      P2A_MAX_ROTATE: "3"              # 单请求最多换号次数
+
+      # ---- 对齐官方 PhanthyCode CLI 请求头 ----
+      P2A_ANTHROPIC_VERSION: "2023-06-01"
+      P2A_BETA: "oauth-2025-04-20"
+      # P2A_UA: "claude-cli/0.3.25"
+      # P2A_EXTRA_HEADERS: "x-phanthy-client-source=desktop,x-phanthy-client-version=1.0.0"
+    volumes:
+      # 凭证与状态持久化（含真实 token，切勿提交到 git）
+      - ./auths:/app/auths
+      - ./data:/app/data
+      # 如需用文件配置（会覆盖上面环境变量之外的项），取消下一行注释
+      # - ./config.json:/app/config.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "-Y", "off", "-q", "-O", "-", "http://localhost:${P2A_PORT:-7864}/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - p2a-net
+
+networks:
+  p2a-net:
+    driver: bridge

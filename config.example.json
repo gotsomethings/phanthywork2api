@@ -1,0 +1,38 @@
+{
+  "listen": ":7864",
+  "api_key": "",
+  "auth_dir": "./auths",
+  "state_file": "./data/state.json",
+  "claims_file": "./data/claims.json",
+  "base_url": "https://code.phanthy.com",
+  "cooldown": {
+    "hard_credit": "12h",
+    "soft_rate": "60s",
+    "err_threshold": 3,
+    "err_cooldown": "10m"
+  },
+  "schedule": {
+    "keepalive_hours": [22],
+    "claim_hours": [8]
+  },
+  "proxy": {
+    "default": "",
+    "by_account": {}
+  },
+  "safety": {
+    "daily_limit": 0,
+    "concurrency": 1,
+    "slot_wait": "0s",
+    "jitter_max": "300ms",
+    "refresh_skew": "10m",
+    "max_rotate": 3,
+    "block_on_risk_control": true
+  },
+  "upstream": {
+    "timeout_seconds": 600,
+    "user_agent": "",
+    "anthropic_version": "2023-06-01",
+    "beta": "oauth-2025-04-20",
+    "extra_headers": {}
+  }
+}

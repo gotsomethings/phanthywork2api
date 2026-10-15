@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>phanthycode2api 控制面板</title>
+<style>
+  :root{
+    --bg:#f4f5f8; --panel:#ffffff; --line:#e2e5ec; --muted:#545c6e; --txt:#1b2130;
+    --accent:#3d5fe0; --accent-d:#2f4bc0; --line-a:#c6d2f8; --bg-a:rgba(61,95,224,.08);
+    --line-ok:#a9dfc6; --bg-ok:rgba(15,157,99,.09); --line-warn:#e6cd96;
+    --bg-warn:rgba(180,118,17,.10); --line-err:#f0b8b4; --bg-err:rgba(207,59,52,.09);
+    --radius:10px; --shadow:0 1px 2px rgba(16,24,40,.04),0 4px 16px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--panel);
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;flex-wrap:wrap}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:12px}
+  .spacer{flex:1}
+  input,select,textarea,button{font-family:inherit;font-size:13px;color:var(--txt)}
+  input,select,textarea{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:7px 10px;width:100%;outline:none;transition:border-color .15s}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 12px;
+    cursor:pointer;white-space:nowrap;transition:all .15s}
+  button:hover{border-color:var(--line-a);color:var(--accent-d)}
+  button.btn{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:500}
+  button.btn:hover{background:var(--accent-d);color:#fff}
+  button.ghost{background:transparent;border-color:var(--line)}
+  button.mini{padding:3px 9px;font-size:12px;border-radius:6px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  nav{display:flex;gap:6px;padding:10px 20px 0;flex-wrap:wrap}
+  nav button{border-radius:8px 8px 0 0;border-bottom:none;background:transparent;color:var(--muted)}
+  nav button.active{background:var(--panel);color:var(--txt);border-color:var(--line);font-weight:500}
+  main{padding:16px 20px 48px;max-width:1200px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;margin-bottom:16px;box-shadow:var(--shadow)}
+  .pg{font-size:14px;font-weight:600;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  .pg .hint{font-weight:400;color:var(--muted);font-size:12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+  .stat{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:22px;font-weight:600;margin-top:2px}
+  .stat.ok .v{color:#0f9d63} .stat.warn .v{color:#b47611} .stat.bad .v{color:#cf3b34}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{color:var(--muted);font-weight:500;font-size:12px;background:var(--bg)}
+  tbody tr:hover{background:#fafbfd}
+  .tag{display:inline-block;padding:1px 8px;border-radius:20px;font-size:12px;border:1px solid}
+  .tag.healthy{color:#0f9d63;border-color:var(--line-ok);background:var(--bg-ok)}
+  .tag.cooling{color:#b47611;border-color:var(--line-warn);background:var(--bg-warn)}
+  .tag.disabled{color:#cf3b34;border-color:var(--line-err);background:var(--bg-err)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
+  .row>label{min-width:140px;color:var(--muted);font-size:13px}
+  .row>input,.row>select{max-width:340px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+  .muted{color:var(--muted)}
+  .msg{padding:9px 12px;border-radius:8px;margin:0 0 14px;font-size:13px;display:none}
+  .msg.ok{display:block;color:#0f7a4d;border:1px solid var(--line-ok);background:var(--bg-ok)}
+  .msg.err{display:block;color:#b3271f;border:1px solid var(--line-err);background:var(--bg-err)}
+  pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;
+    overflow:auto;max-height:320px;font-size:12px;margin:10px 0 0;white-space:pre-wrap;word-break:break-all}
+  textarea{min-height:300px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  .sec{display:none}
+  .sec.active{display:block}
+  .flex{display:flex;gap:6px;flex-wrap:wrap}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13px}
+  .kv .k{color:var(--muted)}
+  .bubble{padding:10px 12px;border-radius:10px;margin:8px 0;max-width:78%;white-space:pre-wrap;word-break:break-word}
+  .bubble.me{background:var(--bg-a);border:1px solid var(--line-a);margin-left:auto}
+  .bubble.ai{background:var(--bg);border:1px solid var(--line)}
+  .bubble.err{background:var(--bg-err);border:1px solid var(--line-err);color:#b3271f}
+  .copy{position:relative}
+  .copy code{display:block;background:var(--bg);border:1px solid var(--line);border-radius:8px;
+    padding:10px 12px;font-size:12px;overflow:auto;white-space:pre;margin-top:6px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>phanthycode2api 控制面板</h1>
+  <span class="sub" id="hdrSub">加载中</span>
+  <span class="spacer"></span>
+  <input id="apiKey" type="password" placeholder="API Key" style="width:200px">
+  <button class="ghost mini" id="btnSaveKey">保存</button>
+  <button class="mini" id="btnRefresh">刷新</button>
+</header>
+
+<nav>
+  <button data-sec="overview" class="active">概览</button>
+  <button data-sec="access">接入信息</button>
+  <button data-sec="play">对话测试台</button>
+  <button data-sec="accounts">账号池</button>
+  <button data-sec="proxy">代理</button>
+  <button data-sec="safety">安全加固</button>
+  <button data-sec="claim">每日签到</button>
+  <button data-sec="config">设置</button>
+</nav>
+
+<main>
+  <div id="msg" class="msg"></div>
+  <!-- 概览 -->
+  <section class="sec active" id="sec-overview">
+    <div class="card">
+      <div class="pg">概览<span class="hint" id="ovUpstream"></span></div>
+      <div class="grid" id="ovCards"></div>
+    </div>
+    <div class="card">
+      <div class="pg">运行参数<span class="hint">面板修改后对新请求立即生效，无需重启</span></div>
+      <div class="kv" id="ovRuntime"></div>
+    </div>
+    <div class="card">
+      <div class="pg">快捷操作</div>
+      <div class="flex">
+        <button class="ghost mini" id="btnOvRunClaim">立即签到（全部账号）</button>
+        <button class="ghost mini" id="btnOvReload">从磁盘重载配置</button>
+        <button class="ghost mini" id="btnOvHealth">健康检查</button>
+      </div>
+      <pre id="ovOut" style="display:none"></pre>
+    </div>
+  </section>
+
+  <!-- 接入信息 -->
+  <section class="sec" id="sec-access">
+    <div class="card">
+      <div class="pg">接入信息<span class="hint">任意 OpenAI 兼容客户端可直接填写</span></div>
+      <div class="kv">
+        <div class="k">Base URL</div><div class="mono" id="acBase"></div>
+        <div class="k">API Key</div><div class="mono" id="acKey"></div>
+        <div class="k">模型数量</div><div class="mono" id="acModels"></div>
+      </div>
+      <div class="copy"><div class="k muted" style="font-size:12px">models</div><code id="cpModels"></code></div>
+      <div class="copy" style="margin-top:10px"><div class="k muted" style="font-size:12px">JSON 配置</div><code id="cpJson"></code></div>
+      <div class="copy" style="margin-top:10px"><div class="k muted" style="font-size:12px">curl 示例</div><code id="cpCurl"></code></div>
+      <div class="row"><button class="mini" id="btnCopyAll">复制以上全部</button></div>
+    </div>
+    <div class="card">
+      <div class="pg">客户端填写对照</div>
+      <table><thead><tr><th>客户端</th><th>设置项</th><th>值</th></tr></thead><tbody id="acPresets"></tbody></table>
+    </div>
+  </section>
+
+  <!-- 对话测试台 -->
+  <section class="sec" id="sec-play">
+    <div class="card">
+      <div class="pg">对话测试台<span class="hint">直接打到本服务的 /v1/chat/completions</span></div>
+      <div class="row">
+        <label>模型</label><select id="playModel" style="max-width:280px"></select>
+        <label style="min-width:0"><input type="checkbox" id="playStream" style="width:auto"> 流式</label>
+        <button class="btn mini" id="playSend">发送</button>
+        <button class="ghost mini" id="playClear">清空</button>
+      </div>
+      <div class="row"><label>提问</label><input id="playMsg" placeholder="你好，数到3"></div>
+      <div id="playLog"></div>
+    </div>
+  </section>
+
+  <!-- 账号池 -->
+  <section class="sec" id="sec-accounts">
+    <div class="card">
+      <div class="pg">账号池<span class="hint">禁用/冷却的账号不会被派发请求</span></div>
+      <table><thead><tr>
+        <th>UID</th><th>状态</th><th>AK</th><th>今日</th><th>代理</th><th>原因</th><th>操作</th>
+      </tr></thead><tbody id="accBody"></tbody></table>
+      <div class="row" style="margin-top:12px">
+        <button class="ghost mini" id="btnAccRefresh">刷新</button>
+        <button class="ghost mini" id="btnAccEnableAll">全部解禁</button>
+        <span class="muted" style="font-size:12px">新增/删除账号请改 auths/ 目录后重启；改代理与解禁无需重启</span>
+      </div>
+      <pre id="accOut" style="display:none"></pre>
+    </div>
+    <div class="card">
+      <div class="pg">设置账号代理<span class="hint">一号一 IP，优先级高于全局代理</span></div>
+      <div class="row">
+        <label>账号</label><select id="proxyUid" style="max-width:280px"></select>
+        <label style="min-width:0">代理</label>
+        <input id="proxyUrl" style="flex:1;min-width:260px" placeholder="留空 = 清除账号级代理，回落全局">
+      </div>
+      <div class="row">
+        <button class="btn mini" id="btnSaveAcctProxy">保存并生效</button>
+        <button class="ghost mini" id="btnLoadAcctProxy">读取当前</button>
+      </div>
+      <div class="muted" style="font-size:12px">测试代理请到「代理」板块的连通性测试里填完整地址。</div>
+    </div>
+  </section>
+
+  <!-- 代理 -->
+  <section class="sec" id="sec-proxy">
+    <div class="card">
+      <div class="pg">全局默认代理<span class="hint">账号未单独设置时使用</span></div>
+      <div class="row">
+        <input id="globalProxy" placeholder="http://Default.account:token@host:port 或 socks5://host:1080">
+        <button class="btn mini" id="btnSaveGlobalProxy">保存并生效</button>
+      </div>
+      <div class="muted" style="font-size:12px">支持 http / https / socks5 / socks5h。配合 Resin 等代理池时，认证用户名写 Platform.Account:token 即可绑定固定出口 IP。</div>
+    </div>
+    <div class="card">
+      <div class="pg">连通性测试<span class="hint">默认请求 api.ipify.org 查看出口 IP</span></div>
+      <div class="row">
+        <label>代理</label><input id="testProxy" placeholder="留空 = 测全局默认代理">
+        <label style="min-width:0">回显地址</label>
+        <input id="testEcho" placeholder="https://api.ipify.org?format=json">
+        <button class="mini" id="btnTestProxy">测试</button>
+      </div>
+      <pre id="testOut" style="display:none"></pre>
+    </div>
+  </section>
+
+  <!-- 安全加固 -->
+  <section class="sec" id="sec-safety">
+    <div class="card">
+      <div class="pg">频率与并发闸门<span class="hint">保存后立即生效</span></div>
+      <div class="row"><label>每账号并发上限</label><input id="sConcurrency" type="number" min="0"><span class="muted" style="font-size:12px">建议 1；0 = 不限</span></div>
+      <div class="row"><label>每日请求上限</label><input id="sDaily" type="number" min="0"><span class="muted" style="font-size:12px">0 = 不限</span></div>
+      <div class="row"><label>派发前随机抖动</label><input id="sJitter" placeholder="300ms"><span class="muted" style="font-size:12px">拟人化；留空关闭</span></div>
+      <div class="row"><label>等槽位最长时间</label><input id="sSlotWait" placeholder="0s"><span class="muted" style="font-size:12px">0s = 不等待直接换号</span></div>
+      <div class="row"><label>单请求最多换号</label><input id="sMaxRotate" type="number" min="1"></div>
+      <div class="row"><label>上游超时（秒）</label><input id="sTimeout" type="number" min="1"><span class="muted" style="font-size:12px">含流式读取总时长</span></div>
+      <div class="row"><label>命中风控阻断请求</label><select id="sBlockRisk">
+        <option value="true">是（禁用账号且不换号重试）</option>
+        <option value="false">否（只禁用账号，继续换号）</option>
+      </select></div>
+      <div class="row"><button class="btn mini" id="btnSaveSafety">保存并生效</button></div>
+    </div>
+    <div class="card">
+      <div class="pg">冷却策略</div>
+      <div class="row"><label>积分不足冷却</label><input id="sHard" placeholder="12h"></div>
+      <div class="row"><label>429 限流冷却</label><input id="sSoft" placeholder="60s"></div>
+      <div class="row"><label>连续错误阈值</label><input id="sThresh" type="number" min="1"></div>
+      <div class="row"><label>错误冷却时长</label><input id="sErrCool" placeholder="10m"></div>
+      <div class="row"><button class="btn mini" id="btnSaveCooldown">保存并生效</button></div>
+      <div class="muted" style="font-size:12px">软限流与连续错误按指数退避递增（分别封顶 1h / 8h），成功后重置。</div>
+    </div>
+  </section>
+
+  <!-- 每日签到 -->
+  <section class="sec" id="sec-claim">
+    <div class="card">
+      <div class="pg">每日签到<span class="hint">POST /api/oauth/activities/daily-login/claim</span></div>
+      <div class="row">
+        <label>签到时间（小时）</label>
+        <input id="claimHours" style="max-width:220px" placeholder="8 或 8,20；留空 = 关闭">
+        <button class="btn mini" id="btnSaveClaim">保存并生效</button>
+        <button class="mini" id="btnRunClaim">立即签到</button>
+      </div>
+      <div class="muted" style="font-size:12px">整点基础上加 0~15 分钟随机抖动；启动时会补签一次；当天已成功的不重复请求。</div>
+      <div class="grid" id="claimCards" style="margin-top:14px"></div>
+    </div>
+    <div class="card">
+      <div class="pg">最近 7 天记录</div>
+      <table><thead><tr><th>日期</th><th>账号</th><th>结果</th><th>时间</th><th>说明</th></tr></thead><tbody id="claimBody"></tbody></table>
+    </div>
+  </section>
+
+  <!-- 设置 -->
+  <section class="sec" id="sec-config">
+    <div class="card">
+      <div class="pg">配置文件<span class="hint" id="cfgPath"></span></div>
+      <div class="row">
+        <button class="mini" id="btnReloadCfg">从磁盘重载</button>
+        <button class="btn mini" id="btnSaveCfg">保存并热生效</button>
+        <span class="muted" style="font-size:12px">保存会写回 config.json 并立即生效，无需重启服务</span>
+      </div>
+      <textarea id="cfgText" spellcheck="false"></textarea>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const KEY_STORE = 'p2a_admin_key';
+let API_KEY = localStorage.getItem(KEY_STORE) || '';
+
+function msg(text, ok){
+  const el = $('msg');
+  el.textContent = text;
+  el.className = 'msg ' + (ok ? 'ok' : 'err');
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>{ el.className='msg'; }, 5000);
+}
+
+async function api(path, opts){
+  opts = opts || {};
+  const headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+  if (API_KEY) headers['Authorization'] = 'Bearer ' + API_KEY;
+  const res = await fetch('api/' + path, Object.assign({}, opts, {headers}));
+  const data = await res.json().catch(()=>({}));
+  if (!res.ok) throw new Error((data.error && data.error.message) || ('HTTP ' + res.status));
+  return data;
+}
+
+// 打主接口（对话测试台用，与面板鉴权同一把钥匙）
+async function chat(body){
+  const headers = {'Content-Type':'application/json'};
+  if (API_KEY) headers['Authorization'] = 'Bearer ' + API_KEY;
+  return fetch('../v1/chat/completions', {method:'POST', headers, body: JSON.stringify(body)});
+}
+
+function fmtTime(v){
+  if (!v) return '-';
+  const d = new Date(v);
+  if (isNaN(d)) return '-';
+  return d.toLocaleString('zh-CN', {hour12:false});
+}
+
+/* ---------- 概览 ---------- */
+async function loadOverview(){
+  const d = await api('overview');
+  $('hdrSub').textContent = 'v' + (d.version||'-') + ' · 监听 ' + d.listen + ' · ' + fmtTime(d.time);
+  $('ovUpstream').textContent = '上游 ' + d.upstream;
+
+  const a = d.accounts || {};
+  const cards = [
+    ['账号总数', a.total||0, ''],
+    ['健康', a.healthy||0, 'ok'],
+    ['冷却中', a.cooling||0, 'warn'],
+    ['已禁用', a.disabled||0, (a.disabled?'bad':'')],
+    ['今日已派发', a.today_used||0, ''],
+  ];
+  $('ovCards').innerHTML = cards.map(([k,v,c])=>
+    '<div class="stat '+c+'"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>').join('');
+
+  const s = d.safety || {}, p = d.proxy || {}, cl = d.claim || {};
+  $('ovRuntime').innerHTML = [
+    ['每账号并发', s.concurrency], ['每日上限', s.daily_limit || '不限'],
+    ['请求抖动', s.jitter_max || '关闭'], ['等槽位', s.slot_wait],
+    ['最多换号', s.max_rotate], ['风控阻断', s.block_on_risk_control ? '是' : '否'],
+    ['上游超时', s.timeout], ['全局代理', p.default || '未设置'],
+    ['账号级代理', (p.by_account||0) + ' 个'],
+    ['每日签到', cl.enabled ? ('每天 ' + (cl.hours||[]).join(', ') + ' 点') : '已关闭'],
+    ['配置文件', d.config_path || '-'],
+  ].map(([k,v])=>'<div class="k">'+k+'</div><div>'+(v===''||v==null?'-':v)+'</div>').join('');
+
+  const sel = $('proxyUid');
+  const keep = sel.value;
+  sel.innerHTML = (a.list||[]).map(x=>'<option value="'+x.uid+'">'+x.uid+'</option>').join('');
+  if (keep) sel.value = keep;
+  return d;
+}
+
+/* ---------- 账号池 ---------- */
+async function loadAccounts(){
+  const d = await api('accounts');
+  const rows = (d.accounts||[]).map(ac=>{
+    const tag = '<span class="tag '+ac.state+'">'+ac.state+'</span>';
+    return '<tr><td class="mono">'+ac.uid+'</td><td>'+tag+'</td>'+
+      '<td>'+(ac.has_api?'有':'无')+'</td><td>'+ac.daily+'</td>'+
+      '<td class="mono muted">'+(ac.proxy||'全局')+'</td>'+
+      '<td class="muted">'+(ac.reason||'-')+'</td>'+
+      '<td><div class="flex">'+
+        '<button class="ghost mini" onclick="act(\''+ac.uid+'\',\'enable\')">解禁</button>'+
+        '<button class="ghost mini" onclick="act(\''+ac.uid+'\',\'disable\')">禁用</button>'+
+        '<button class="ghost mini" onclick="act(\''+ac.uid+'\',\'clear-cooldown\')">清冷却</button>'+
+        '<button class="ghost mini" onclick="acctClaim(\''+ac.uid+'\')">签到</button>'+
+        '<button class="ghost mini" onclick="acctRewards(\''+ac.uid+'\')">积分</button>'+
+      '</div></td></tr>';
+  }).join('');
+  $('accBody').innerHTML = rows || '<tr><td colspan="7" class="muted">暂无账号</td></tr>';
+}
+
+async function act(uid, action){
+  try{
+    const d = await api('accounts/'+encodeURIComponent(uid)+'/'+action, {method:'POST', body:'{}'});
+    msg(action==='disable' ? ('已禁用 '+uid) : ('已恢复 '+uid), true);
+    if (d.state) loadAccounts();
+    refresh();
+  }catch(e){ msg('操作失败：'+e.message, false); }
+}
+
+async function acctClaim(uid){
+  try{
+    const d = await api('accounts/'+encodeURIComponent(uid)+'/claim', {method:'POST', body:'{}'});
+    msg('签到结果：' + (d.message || (d.error || '未知')), !!d.ok);
+    refresh();
+  }catch(e){ msg('签到失败：'+e.message, false); }
+}
+
+async function acctRewards(uid){
+  const out = $('accOut');
+  out.style.display = 'block';
+  out.textContent = uid + ' 查询中...';
+  try{
+    const d = await api('rewards/'+encodeURIComponent(uid));
+    out.textContent = uid + ' 积分/奖励：\n' + JSON.stringify(d.rewards, null, 2);
+  }catch(e){
+    out.textContent = uid + ' 查询失败：' + e.message;
+  }
+}
+
+/* ---------- 代理 ---------- */
+async function loadProxy(){
+  const d = await api('config');
+  const c = d.config || {};
+  $('globalProxy').value = (c.proxy && c.proxy.default) || '';
+}
+
+async function saveGlobalProxy(){
+  const v = $('globalProxy').value.trim();
+  try{
+    await api('config', {method:'PUT', body: JSON.stringify({patch:{proxy:{default:v}}, persist:true})});
+    msg('全局代理已保存并生效', true); refresh();
+  }catch(e){ msg('保存失败：'+e.message, false); }
+}
+
+// 读出当前账号的代理状态（列表接口里是脱敏的，所以只提示、不回填）
+async function loadAcctProxy(){
+  const uid = $('proxyUid').value; if (!uid) return;
+  const d = await api('accounts');
+  const hit = (d.accounts||[]).find(x=>x.uid===uid);
+  $('proxyUrl').value = '';
+  $('proxyUrl').placeholder = (hit && hit.proxy)
+    ? ('当前：' + hit.proxy + '（已脱敏，重新填写可覆盖）')
+    : '（无账号级代理，走全局）';
+}
+
+async function saveAcctProxy(){
+  const uid = $('proxyUid').value, v = $('proxyUrl').value.trim();
+  if (!uid){ msg('请先选择账号', false); return; }
+  try{
+    await api('accounts/'+encodeURIComponent(uid)+'/proxy',
+      {method:'PUT', body: JSON.stringify({proxy:v, persist:true})});
+    msg(v ? ('账号 '+uid+' 的代理已保存并生效') : ('账号 '+uid+' 已清除专属代理，回落全局'), true);
+    refresh();
+  }catch(e){ msg('保存失败：'+e.message, false); }
+}
+
+async function testProxy(){
+  const out = $('testOut');
+  out.style.display = 'block';
+  out.textContent = '测试中...';
+  try{
+    const d = await api('proxy/test', {method:'POST',
+      body: JSON.stringify({proxy:$('testProxy').value.trim(), echo_url:$('testEcho').value.trim()})});
+    out.textContent = JSON.stringify(d, null, 2);
+    msg(d.ok ? '代理连通正常' : '代理不可用', !!d.ok);
+  }catch(e){ out.textContent = '测试失败：'+e.message; }
+}
+
+/* ---------- 安全加固 ---------- */
+async function loadSafety(){
+  const d = await api('config');
+  const c = d.config || {}, s = c.safety || {}, co = c.cooldown || {}, up = c.upstream || {};
+  $('sConcurrency').value = s.concurrency ?? 1;
+  $('sDaily').value = s.daily_limit ?? 0;
+  $('sJitter').value = s.jitter_max || '';
+  $('sSlotWait').value = s.slot_wait || '';
+  $('sMaxRotate').value = s.max_rotate ?? 3;
+  $('sTimeout').value = up.timeout_seconds ?? 600;
+  $('sBlockRisk').value = String(s.block_on_risk_control !== false);
+  $('sHard').value = co.hard_credit || '';
+  $('sSoft').value = co.soft_rate || '';
+  $('sThresh').value = co.err_threshold ?? 3;
+  $('sErrCool').value = co.err_cooldown || '';
+}
+
+async function saveSafety(){
+  try{
+    await api('config', {method:'PUT', body: JSON.stringify({persist:true, patch:{
+      safety:{
+        concurrency: parseInt($('sConcurrency').value||'1',10),
+        daily_limit: parseInt($('sDaily').value||'0',10),
+        jitter_max: $('sJitter').value.trim(),
+        slot_wait: $('sSlotWait').value.trim(),
+        max_rotate: parseInt($('sMaxRotate').value||'3',10),
+        block_on_risk_control: $('sBlockRisk').value === 'true',
+      },
+      upstream:{ timeout_seconds: parseInt($('sTimeout').value||'600',10) }
+    }})});
+    msg('安全参数已保存并生效', true); refresh();
+  }catch(e){ msg('保存失败：'+e.message, false); }
+}
+
+async function saveCooldown(){
+  try{
+    await api('config', {method:'PUT', body: JSON.stringify({persist:true, patch:{
+      cooldown:{
+        hard_credit: $('sHard').value.trim(),
+        soft_rate: $('sSoft').value.trim(),
+        err_threshold: parseInt($('sThresh').value||'3',10),
+        err_cooldown: $('sErrCool').value.trim(),
+      }}})});
+    msg('冷却策略已保存并生效', true);
+  }catch(e){ msg('保存失败：'+e.message, false); }
+}
+
+/* ---------- 签到 ---------- */
+async function loadClaim(){
+  const d = await api('claims');
+  $('claimHours').value = (d.hours||[]).join(',');
+  $('claimCards').innerHTML = [
+    ['今日成功', d.today_ok ?? 0, 'ok'],
+    ['今日失败', d.today_fail ?? 0, (d.today_fail?'bad':'')],
+    ['状态', d.enabled ? '已开启' : '已关闭', d.enabled?'ok':'warn'],
+  ].map(([k,v,c])=>'<div class="stat '+c+'"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>').join('');
+
+  const recent = d.recent || {};
+  let rows = '';
+  for (const day of Object.keys(recent).sort().reverse()){
+    for (const [uid, r] of Object.entries(recent[day])){
+      rows += '<tr><td class="mono">'+day+'</td><td class="mono">'+uid+'</td>'+
+        '<td><span class="tag '+(r.ok?'healthy':'disabled')+'">'+(r.ok?'成功':'失败')+'</span></td>'+
+        '<td class="muted">'+fmtTime(r.at)+'</td><td class="muted">'+(r.msg||'-')+'</td></tr>';
+    }
+  }
+  $('claimBody').innerHTML = rows || '<tr><td colspan="5" class="muted">暂无签到记录</td></tr>';
+}
+
+async function saveClaim(){
+  const raw = $('claimHours').value.trim();
+  let hours = [];
+  if (raw) hours = raw.split(',').map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n)&&n>=0&&n<=23);
+  try{
+    await api('config', {method:'PUT', body: JSON.stringify({persist:true, patch:{schedule:{claim_hours:hours}}})});
+    msg(hours.length ? ('签到已开启：每天 '+hours.join(', ')+' 点') : '签到已关闭', true);
+    refresh();
+  }catch(e){ msg('保存失败：'+e.message, false); }
+}
+
+async function runClaim(){
+  try{
+    await api('claims/run', {method:'POST', body:'{}'});
+    msg('已触发签到，3 秒后刷新查看结果', true);
+    setTimeout(()=>{ loadClaim(); loadOverview(); loadAccounts(); }, 3000);
+  }catch(e){ msg('触发失败：'+e.message, false); }
+}
+
+/* ---------- 接入信息 ---------- */
+async function loadAccess(){
+  const base = location.origin.replace(/\/admin\/?$/, '');
+  const models = await loadModels();
+  $('acBase').textContent = base;
+  $('acKey').textContent = API_KEY ? API_KEY : '（未设置，服务端未开启鉴权）';
+  $('acModels').textContent = models.length + ' 个';
+  $('cpModels').textContent = models.join('\n');
+  const cfgObj = (await api('config')).config || {};
+  $('cpJson').textContent = JSON.stringify(cfgObj, null, 2);
+  $('cpCurl').textContent = 'curl ' + base + '/v1/chat/completions \\\n' +
+    '  -H "Authorization: Bearer ' + (API_KEY||'<key>') + '" \\\n' +
+    '  -H "Content-Type: application/json" \\\n' +
+    '  -d \'{"model":"' + (models[0]||'DeepSeek-V4') + '","messages":[{"role":"user","content":"你好"}]}\'';
+  $('acPresets').innerHTML = [
+    ['NextChat / LobeChat', 'OpenAI 兼容地址', base + '/v1'],
+    ['ChatBox', 'API Host', base + '/v1'],
+    ['OpenCat', 'API Key + Endpoint', base + '/v1'],
+    ['Cherry Studio', '服务商：OpenAI + 地址', base + '/v1'],
+  ].map(r=>'<tr><td>'+r[0]+'</td><td class="muted">'+r[1]+'</td><td class="mono">'+r[2]+'</td></tr>').join('');
+  return models;
+}
+
+async function loadModels(){
+  const r = await fetch('../v1/models', {
+    headers: API_KEY ? {'Authorization':'Bearer '+API_KEY} : {}
+  });
+  if (!r.ok) return [];
+  const d = await r.json();
+  return (d.data||[]).map(m=>m.id);
+}
+
+/* ---------- 对话测试台 ---------- */
+async function loadPlay(){
+  const models = await loadAccess();
+  const sel = $('playModel');
+  sel.innerHTML = models.map(m=>'<option>'+m+'</option>').join('') || '<option>DeepSeek-V4</option>';
+}
+
+async function playSend(){
+  const text = $('playMsg').value.trim();
+  if (!text){ msg('请输入提问内容', false); return; }
+  const log = $('playLog');
+  const me = document.createElement('div');
+  me.className = 'bubble me';
+  me.textContent = text;
+  log.appendChild(me);
+
+  const ai = document.createElement('div');
+  ai.className = 'bubble ai';
+  ai.textContent = '请求中...';
+  log.appendChild(ai);
+  log.scrollTop = log.scrollHeight;
+
+  try{
+    const res = await chat({
+      model: $('playModel').value,
+      stream: $('playStream').checked,
+      messages: [{role:'user', content:text}],
+    });
+    if (!res.ok){
+      const d = await res.json().catch(()=>({}));
+      ai.className = 'bubble err';
+      ai.textContent = 'HTTP ' + res.status + '：' + ((d.error&&d.error.message)||'请求失败');
+      return;
+    }
+    if (!$('playStream').checked){
+      const d = await res.json();
+      ai.className = 'bubble ai';
+      ai.textContent = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) ||
+        JSON.stringify(d);
+      return;
+    }
+    // 流式：解析 SSE
+    ai.className = 'bubble ai';
+    ai.textContent = '';
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    for(;;){
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream:true});
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+      for (const line of lines){
+        const t = line.trim();
+        if (!t.startsWith('data:')) continue;
+        const payload = t.slice(5).trim();
+        if (payload === '[DONE]') continue;
+        try{
+          const j = JSON.parse(payload);
+          const delta = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+          if (delta){ ai.textContent += delta; log.scrollTop = log.scrollHeight; }
+        }catch(e){}
+      }
+    }
+    if (!ai.textContent) ai.textContent = '（无内容返回）';
+  }catch(e){
+    ai.className = 'bubble err';
+    ai.textContent = '请求失败：'+e.message;
+  }
+}
+
+/* ---------- 设置 ---------- */
+async function loadConfig(){
+  const d = await api('config');
+  $('cfgPath').textContent = d.path ? ('路径：'+d.path) : '未指定配置文件（仅默认值 + 环境变量）';
+  $('cfgText').value = JSON.stringify(d.config, null, 2);
+}
+
+async function saveConfig(){
+  let obj;
+  try{ obj = JSON.parse($('cfgText').value); }
+  catch(e){ msg('JSON 格式错误：'+e.message, false); return; }
+  try{
+    await api('config', {method:'PUT', body: JSON.stringify({config:obj, persist:true})});
+    msg('配置已保存并热生效', true); refresh();
+  }catch(e){ msg('保存失败：'+e.message, false); }
+}
+
+async function reloadConfig(){
+  try{
+    await api('reload', {method:'POST', body:'{}'});
+    msg('已从磁盘重新加载配置', true); refresh();
+  }catch(e){ msg('重载失败：'+e.message, false); }
+}
+
+async function healthCheck(){
+  try{
+    const r = await fetch('../healthz');
+    msg('健康检查：' + r.status + ' ' + (await r.text()), r.ok);
+  }catch(e){ msg('健康检查失败：'+e.message, false); }
+}
+
+async function enableAll(){
+  const d = await api('accounts');
+  let n = 0;
+  for (const ac of d.accounts||[]){
+    if (ac.state !== 'healthy'){
+      await api('accounts/'+encodeURIComponent(ac.uid)+'/enable', {method:'POST', body:'{}'});
+      n++;
+    }
+  }
+  msg('已解禁 '+n+' 个账号', true);
+  refresh();
+}
+
+/* ---------- 导航与初始化 ---------- */
+function refresh(){
+  loadOverview().catch(e=>msg('概览加载失败：'+e.message,false));
+  loadAccounts().catch(()=>{});
+  loadProxy().catch(()=>{});
+  loadSafety().catch(()=>{});
+  loadClaim().catch(()=>{});
+  loadConfig().catch(()=>{});
+  loadPlay().catch(()=>{});
+}
+
+document.querySelectorAll('nav button').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.sec').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    $('sec-'+b.dataset.sec).classList.add('active');
+  };
+});
+
+$('btnSaveKey').onclick = ()=>{
+  API_KEY = $('apiKey').value.trim();
+  localStorage.setItem(KEY_STORE, API_KEY);
+  msg(API_KEY ? '密钥已保存（仅存本浏览器）' : '已清除密钥', true);
+  refresh();
+};
+$('btnRefresh').onclick = refresh;
+$('btnSaveGlobalProxy').onclick = saveGlobalProxy;
+$('btnSaveAcctProxy').onclick = saveAcctProxy;
+$('btnLoadAcctProxy').onclick = loadAcctProxy;
+$('btnTestProxy').onclick = testProxy;
+$('btnSaveSafety').onclick = saveSafety;
+$('btnSaveCooldown').onclick = saveCooldown;
+$('btnSaveClaim').onclick = saveClaim;
+$('btnRunClaim').onclick = runClaim;
+$('btnSaveCfg').onclick = saveConfig;
+$('btnReloadCfg').onclick = reloadConfig;
+$('btnAccRefresh').onclick = loadAccounts;
+$('btnAccEnableAll').onclick = enableAll;
+$('btnOvRunClaim').onclick = runClaim;
+$('btnOvReload').onclick = reloadConfig;
+$('btnOvHealth').onclick = healthCheck;
+$('btnCopyAll').onclick = async ()=>{
+  const txt = [$('cpModels').textContent, $('cpJson').textContent, $('cpCurl').textContent].join('\n\n');
+  try{ await navigator.clipboard.writeText(txt); msg('已复制', true); }
+  catch(e){ msg('复制失败：'+e.message, false); }
+};
+$('playSend').onclick = playSend;
+$('playClear').onclick = ()=>{ $('playLog').innerHTML = ''; };
+$('playMsg').addEventListener('keydown', e=>{ if (e.key === 'Enter') playSend(); });
+
+$('apiKey').value = API_KEY;
+refresh();
+</script>
+</body>
+</html>
