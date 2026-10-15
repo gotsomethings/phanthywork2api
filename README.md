@@ -2,6 +2,10 @@
 
 > 将 PhanthyCode CLI 的 Anthropic Messages API 转换为 OpenAI 兼容 API，Go 实现。
 
+本项目基于 [lwjlwjlwjlwj/phanthycode2api](https://github.com/lwjlwjlwjlwj/phanthycode2api)（MIT）改进，
+在此致谢原作者的协议转换、多账号池与 OAuth 登录框架。主要新增：账号安全加固、按账号代理、
+每日签到领积分、内置控制面板与配置热重载，详见下方各章节。
+
 多账号池管理 + 冷却与错误处理 + OpenAI ↔ Anthropic 协议转换，把 PhanthyCode 上游封装成
 任意 OpenAI 兼容客户端（NextChat、ChatBox、OpenCat 等）可直接接入的标准接口。
 
