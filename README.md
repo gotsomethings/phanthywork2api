@@ -1,4 +1,4 @@
-# phanthycode2api
+# phanthywork2api
 
 > 将 PhanthyCode CLI 的 Anthropic Messages API 转换为 OpenAI 兼容 API，Go 实现。
 
@@ -30,9 +30,9 @@
 ### 1. 构建 & 配置
 
 ```bash
-git clone https://github.com/lwjlwjlwjlwj/phanthycode2api.git
-cd phanthycode2api
-go build -o phanthycode2api ./cmd/server
+git clone https://github.com/somthingthere/phanthywork2api.git
+cd phanthywork2api
+go build -o phanthywork2api ./cmd/server
 cp config.example.json config.json
 # 编辑 config.json，设置 api_key（可留空 = 不鉴权）
 ```
@@ -48,13 +48,13 @@ go run ./cmd/login
 ### 3. 启动服务
 
 ```bash
-./phanthycode2api -config config.json
+./phanthywork2api -config config.json
 ```
 
 或直接用环境变量（无需配置文件）：
 
 ```bash
-P2A_LISTEN=:7864 P2A_API_KEY=your-secret-key ./phanthycode2api
+P2A_LISTEN=:7864 P2A_API_KEY=your-secret-key ./phanthywork2api
 ```
 
 默认监听 `:7864`，可通过 `P2A_LISTEN` 环境变量覆盖。
@@ -219,7 +219,7 @@ curl -X PUT http://localhost:7864/admin/api/accounts/acc1/proxy \
 | `safety.max_rotate` | `P2A_MAX_ROTATE` | `3` | 单请求最多换号次数 |
 | `safety.block_on_risk_control` | — | `true` | 命中风控是否阻断整个请求 |
 | `upstream.timeout_seconds` | `P2A_TIMEOUT_SECONDS` | `600` | 上游请求超时（含流式读取总时长） |
-| `upstream.user_agent` | `P2A_UA` | `phanthycode2api/1.0` | 上游请求 UA |
+| `upstream.user_agent` | `P2A_UA` | `phanthywork2api/1.0` | 上游请求 UA |
 | `upstream.anthropic_version` | `P2A_ANTHROPIC_VERSION` | `2023-06-01` | Anthropic 版本头（官方 CLI 必发） |
 | `upstream.beta` | `P2A_BETA` | `oauth-2025-04-20` | anthropic-beta 头 |
 | `upstream.extra_headers` | `P2A_EXTRA_HEADERS` | `{}` | 额外注入头（`k1=v1,k2=v2`） |
@@ -394,14 +394,14 @@ curl -s http://localhost:7864/v1/chat/completions \
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| phanthycode2api | `7864` | OpenAI 兼容 API 入口 |
+| phanthywork2api | `7864` | OpenAI 兼容 API 入口 |
 
 > 国内网络环境：Dockerfile 使用官方 `golang:1.26-alpine` 基础镜像；若拉取缓慢，可改用国内镜像源（如阿里云 `registry.cn-hangzhou.aliyuncs.com`）或配置 Docker daemon 镜像加速。
 
 ## 目录结构
 
 ```
-phanthycode2api/
+phanthywork2api/
 ├── cmd/
 │   ├── server/          # 服务入口：配置 → auth → pool → upstream → scheduler → server
 │   │   ├── main.go

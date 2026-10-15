@@ -4,7 +4,7 @@ WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /out/phanthycode2api ./cmd/server
+RUN CGO_ENABLED=0 go build -o /out/phanthywork2api ./cmd/server
 
 FROM alpine:3.20
 WORKDIR /app
@@ -12,7 +12,7 @@ WORKDIR /app
 # 运行时工具（healthcheck 用 wget）
 RUN apk add --no-cache wget
 
-COPY --from=builder /out/phanthycode2api /app/phanthycode2api
+COPY --from=builder /out/phanthywork2api /app/phanthywork2api
 # 注意：不再把 config.example.json 打进镜像（其 api_key 为 "***" 会变成默认密钥）。
 # 未挂载 config.json 时走代码默认值 + P2A_* 环境变量。
 COPY config.example.json /app/config.example.json
@@ -21,4 +21,4 @@ COPY config.example.json /app/config.example.json
 VOLUME ["/app/auths", "/app/data"]
 
 EXPOSE 7864
-CMD ["/app/phanthycode2api", "-config", "/app/config.json"]
+CMD ["/app/phanthywork2api", "-config", "/app/config.json"]

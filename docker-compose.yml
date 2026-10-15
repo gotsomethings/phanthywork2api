@@ -1,12 +1,12 @@
 version: "3.8"
 
 services:
-  phanthycode2api:
+  phanthywork2api:
     build:
       context: .
       dockerfile: Dockerfile
-    image: phanthycode2api:latest
-    container_name: phanthycode2api
+    image: phanthywork2api:latest
+    container_name: phanthywork2api
     restart: unless-stopped
     ports:
       # 冒号左边是宿主机端口，右边是容器内端口；改端口只需在 .env 里设 P2A_PORT
