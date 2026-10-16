@@ -56,12 +56,45 @@ jobs:
           tar czf "$tarball" "$binary"
           echo "tarball=$tarball" >> "$GITHUB_ENV"
 
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            python3 - "${GITHUB_REF_NAME}" <<'PY'
+          import sys
+          tag = sys.argv[1]
+          ver = tag[1:] if tag[:1] in ('v',) else tag
+          lines = open('CHANGELOG.md', encoding='utf-8').read().splitlines()
+          out, capture, found = [], False, False
+          for line in lines:
+              if line.startswith('## ['):
+                  if capture:
+                      break
+                  if line[4:].split(']')[0].strip() == ver:
+                      capture, found = True, True
+                  continue
+              if capture:
+                  out.append(line)
+          body = '\n'.join(out).strip()
+          open('RELEASE_NOTES.md', 'w', encoding='utf-8').write((body or ('版本 ' + ver)) + '\n')
+          print('found=%s chars=%d' % (found, len(body)))
+          PY
+          else
+            printf '__NO_CHANGELOG__\n' > RELEASE_NOTES.md
+          fi
+
+      - name: Remove placeholder if CHANGELOG missing
+        run: |
+          if grep -q '__NO_CHANGELOG__' RELEASE_NOTES.md 2>/dev/null; then
+            rm -f RELEASE_NOTES.md
+          fi
+
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.tarball }}
-          # 由 tag 推送触发时自动创建 Release；已存在则追加附件
-          generate_release_notes: true
+          # 正文优先从 CHANGELOG.md 读取；没有则回退到自动生成的提交说明
+          body_path: RELEASE_NOTES.md
+          generate_release_notes: false
 
   build-docker:
     runs-on: ubuntu-latest
