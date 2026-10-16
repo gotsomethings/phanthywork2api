@@ -46,7 +46,7 @@ if ($plainToken -notmatch "^ghp_[a-zA-Z0-9]{36}$") {
 # ---- 设置远程并推送 ----
 Write-Host "`n[3/5] 推送到 GitHub..." -ForegroundColor Yellow
 
-$remoteUrl = "https://somthingthere:${plainToken}@github.com/somthingthere/phanthywork2api.git"
+$remoteUrl = "https://gotsomethings:${plainToken}@github.com/gotsomethings/phanthywork2api.git"
 git remote remove origin 2>$null
 git remote add origin $remoteUrl
 
@@ -82,7 +82,7 @@ if ($doRelease) {
     git tag -a "$tag" -m "Release $tag"
     git push origin "$tag"
     Write-Host "✅ 已推送标签 $tag" -ForegroundColor Green
-    Write-Host "   查看构建进度: https://github.com/somthingthere/phanthywork2api/actions" -ForegroundColor Cyan
+    Write-Host "   查看构建进度: https://github.com/gotsomethings/phanthywork2api/actions" -ForegroundColor Cyan
 }
 
 # ---- 清理 ----
@@ -90,13 +90,13 @@ Write-Host "`n[5/5] 清理临时 remote..." -ForegroundColor Yellow
 git remote remove origin 2>$null
 
 # 重新添加不带 token 的 remote（便于后续正常使用）
-git remote add origin "https://github.com/somthingthere/phanthywork2api.git" 2>$null
+git remote add origin "https://github.com/gotsomethings/phanthywork2api.git" 2>$null
 
 Write-Host "`n========================================" -ForegroundColor Green
 Write-Host "  发布完成!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "源码: https://github.com/somthingthere/phanthywork2api" -ForegroundColor Cyan
+Write-Host "源码: https://github.com/gotsomethings/phanthywork2api" -ForegroundColor Cyan
 if ($doRelease) {
-    Write-Host "镜像: https://github.com/somthingthere/phanthywork2api/pkgs/container/phanthywork2api" -ForegroundColor Cyan
-    Write-Host "Release: https://github.com/somthingthere/phanthywork2api/releases" -ForegroundColor Cyan
+    Write-Host "镜像: https://github.com/gotsomethings/phanthywork2api/pkgs/container/phanthywork2api" -ForegroundColor Cyan
+    Write-Host "Release: https://github.com/gotsomethings/phanthywork2api/releases" -ForegroundColor Cyan
 }

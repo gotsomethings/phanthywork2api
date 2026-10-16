@@ -30,7 +30,7 @@
 ### 1. 构建 & 配置
 
 ```bash
-git clone https://github.com/somthingthere/phanthywork2api.git
+git clone https://github.com/gotsomethings/phanthywork2api.git
 cd phanthywork2api
 go build -o phanthywork2api ./cmd/server
 cp config.example.json config.json
