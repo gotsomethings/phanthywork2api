@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -49,6 +50,14 @@ func main() {
 	}
 	log.Printf("loaded %d account(s) from %s", len(auths), cfg.AuthDir)
 
+	// authsMu 保护 auths 切片：面板添加账号时会从 HTTP goroutine 追加。
+	var authsMu sync.RWMutex
+	applyProxiesLocked := func(c *conf.Config) {
+		authsMu.RLock()
+		defer authsMu.RUnlock()
+		applyProxies(auths, c)
+	}
+
 	p := pool.New(cfg.StateFile)
 	for _, a := range auths {
 		p.Add(a)
@@ -72,9 +81,9 @@ func main() {
 
 	// ---- 配置热生效：面板/API 改配置后立即应用，不重启 ----
 	mgr.OnApply(func(c *conf.Config) {
-		applyConfig(c, p, up, sch, auths)
+		applyConfig(c, p, up, sch, auths, applyProxiesLocked)
 	})
-	applyConfig(cfg, p, up, sch, auths)
+	applyConfig(cfg, p, up, sch, auths, applyProxiesLocked)
 
 	h := server.NewHandler(server.Config{
 		Pool:     p,
@@ -95,6 +104,15 @@ func main() {
 		ClaimNow: func() { go sch.RunClaimNow() },
 		APIKey:   cfg.APIKey,
 		Version:  version,
+		AuthDir:  cfg.AuthDir,
+		// P3：面板添加账号后，新账号立即入池并应用当前代理配置。
+		OnAccountAdded: func(a *auth.Auth) {
+			p.Add(a)
+			authsMu.Lock()
+			auths = append(auths, a)
+			authsMu.Unlock()
+			applyProxiesLocked(mgr.Get())
+		},
 	})
 
 	// 面板与主 API 共用一个端口：/admin/* 走面板，其余走 OpenAI 兼容接口
@@ -135,7 +153,7 @@ func main() {
 var version = "1.1.0"
 
 // applyConfig 把配置应用到各组件（启动时与热更新时共用）。
-func applyConfig(c *conf.Config, p *pool.Pool, up *upstream.Client, sch *scheduler.Scheduler, auths []*auth.Auth) {
+func applyConfig(c *conf.Config, p *pool.Pool, up *upstream.Client, sch *scheduler.Scheduler, auths []*auth.Auth, applyProxiesFn func(*conf.Config)) {
 	p.SetLimits(c.Safety.DailyLimit, c.Safety.Concurrency)
 
 	up.SetOpts(&upstream.Opts{
@@ -148,11 +166,14 @@ func applyConfig(c *conf.Config, p *pool.Pool, up *upstream.Client, sch *schedul
 	})
 
 	// 代理接线：账号级优先，其次全局默认。
-	applyProxies(auths, c)
+	if applyProxiesFn != nil {
+		applyProxiesFn(c)
+	} else {
+		applyProxies(auths, c)
+	}
 
 	sch.SetHours(c.Schedule.KeepaliveHours, c.Schedule.ClaimHours)
 }
-
 // applyProxies 把配置的代理写到账号凭证上。
 // 优先级：proxy.by_account[uid] > proxy.by_account[文件名] > proxy.default。
 func applyProxies(auths []*auth.Auth, cfg *conf.Config) {

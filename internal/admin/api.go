@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"phanthycode2api/internal/auth"
 	"phanthycode2api/internal/claims"
 	"phanthycode2api/internal/conf"
 	"phanthycode2api/internal/pool"
@@ -22,6 +23,11 @@ import (
 
 // Config admin 依赖。
 type Config struct {
+	// AuthDir 账号凭证目录（P3：面板添加账号时落盘位置）。
+	AuthDir string
+	// OnAccountAdded 新账号落盘后的回调，用于加入运行时账号池。
+	OnAccountAdded func(*auth.Auth)
+
 	Manager  *conf.Manager
 	Pool     *pool.Pool
 	Upstream *upstream.Client
@@ -50,6 +56,10 @@ func New(cfg Config) *Admin {
 	a.mux.HandleFunc("/admin/api/claims", a.withAuth(a.claimsStatus))
 	a.mux.HandleFunc("/admin/api/claims/run", a.withAuth(a.claimsRun))
 	a.mux.HandleFunc("/admin/api/rewards/", a.withAuth(a.accountRewards))
+	// P3：面板内添加账号（PKCE 授权链接 + 粘贴 code）
+	a.mux.HandleFunc("/admin/api/accounts/login/start", a.withAuth(a.accountLoginStart))
+	a.mux.HandleFunc("/admin/api/accounts/login/exchange", a.withAuth(a.accountLoginExchange))
+	a.mux.HandleFunc("/admin/api/accounts/login/cancel", a.withAuth(a.accountLoginCancel))
 	return a
 }
 
@@ -539,9 +549,111 @@ func (a *Admin) accountRewards(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "uid": uid, "rewards": m})
 }
 
+// ---------------------------------------------------------------------------
+// P3：面板内添加账号（PKCE 授权链接 + 粘贴 code）
+// ---------------------------------------------------------------------------
+
+// accountLoginStart POST /admin/api/accounts/login/start
+// 生成 PKCE 授权链接，返回 auth_url 与 state。
+func (a *Admin) accountLoginStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+		return
+	}
+	state, authURL, err := a.cfg.Upstream.StartLogin()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "login_start_failed", err.Error())
+		return
+	}
+	log.Printf("admin: login start state=%s", state[:6])
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":           true,
+		"state":        state,
+		"auth_url":     authURL,
+		"redirect_uri": upstream.OAuthRedirectURI,
+		"expires_in":   int(loginTTLSeconds),
+	})
+}
+
+// loginTTLSeconds 授权链接有效期（秒），与 upstream 内部 TTL 一致。
+const loginTTLSeconds = 15 * 60
+
+// accountLoginExchange POST /admin/api/accounts/login/exchange
+// 用 state + code 换取 token，落盘 auths/ 并接入运行时账号池。
+func (a *Admin) accountLoginExchange(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	var payload struct {
+		State     string `json:"state"`
+		Code      string `json:"code"`
+		Nickname  string `json:"nickname"`
+		Proxy     string `json:"proxy"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_request", "invalid JSON: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(payload.State) == "" {
+		writeErr(w, http.StatusBadRequest, "bad_request", "missing state")
+		return
+	}
+	if strings.TrimSpace(payload.Code) == "" {
+		writeErr(w, http.StatusBadRequest, "bad_request", "missing code")
+		return
+	}
+
+	authDir := a.cfg.AuthDir
+	if authDir == "" && a.cfg.Manager != nil {
+		authDir = a.cfg.Manager.Get().AuthDir
+	}
+
+	acct, err := a.cfg.Upstream.ExchangeLogin(payload.State, payload.Code, authDir, payload.Proxy, payload.Nickname)
+	if err != nil {
+		log.Printf("admin: login exchange failed: %v", err)
+		writeJSON(w, http.StatusBadGateway, map[string]any{
+			"ok": false, "error": err.Error()})
+		return
+	}
+	if a.cfg.OnAccountAdded != nil {
+		a.cfg.OnAccountAdded(acct)
+	}
+	log.Printf("admin: account added uid=%s nickname=%s", acct.UID, acct.Nickname)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"uid":        acct.UID,
+		"nickname":   acct.Nickname,
+		"has_api":    acct.APIKey != "",
+		"expires_at": acct.ExpiresAt,
+		"file":       acct.FilePath,
+	})
+}
+
+// accountLoginCancel POST /admin/api/accounts/login/cancel
+func (a *Admin) accountLoginCancel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+		return
+	}
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+	var payload struct {
+		State string `json:"state"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	if payload.State != "" {
+		a.cfg.Upstream.CancelLogin(payload.State)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // uidFrom 从路径里截取 uid（去掉 prefix 与可能的 action 段）。
-func uidFrom(path, prefix string) string {
-	rest := strings.TrimPrefix(path, prefix)
+func uidFrom(path, prefix string) string {	rest := strings.TrimPrefix(path, prefix)
 	if i := strings.Index(rest, "/"); i >= 0 {
 		rest = rest[:i]
 	}

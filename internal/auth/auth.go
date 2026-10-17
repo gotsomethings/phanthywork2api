@@ -43,6 +43,39 @@ func (a *Auth) ProxyURL() string {
 	return a.Proxy
 }
 
+// CredentialSnapshot 在锁内一次性取出发请求所需字段（读锁），
+// 调用方拿到快照后应在锁外发起网络请求，避免持锁跨 IO。
+func (a *Auth) CredentialSnapshot() (accessToken, apiKey, proxy, uid string) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.AccessToken, a.APIKey, a.Proxy, a.UID
+}
+
+// RefreshSnapshot 在锁内取出刷新所需字段（读锁）。
+func (a *Auth) RefreshSnapshot() (refreshToken, proxy, uid string) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.RefreshToken, a.Proxy, a.UID
+}
+
+// ApplyRefresh 在锁内更新刷新结果并原子落盘（P2）。
+// 刷新成功后必须落盘，否则进程重启后仍用旧 token，账号失效。
+// 返回落盘错误（内存已更新，调用方可仅告警）。
+func (a *Auth) ApplyRefresh(accessToken, refreshToken string, expiresAt int64) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if accessToken != "" {
+		a.AccessToken = accessToken
+	}
+	if refreshToken != "" {
+		a.RefreshToken = refreshToken
+	}
+	if expiresAt > 0 {
+		a.ExpiresAt = expiresAt
+	}
+	return a.saveAtomicLocked()
+}
+
 // SetProxy 设置账号代理，返回是否配置成功（空串表示不设置）。
 func (a *Auth) SetProxy(p string) bool {
 	p = strings.TrimSpace(p)
@@ -186,6 +219,19 @@ func Parse(raw []byte) (*Auth, error) {
 
 // SaveAtomic 以嵌套形原子写回 FilePath（tmp + rename），保持可读格式。
 // 加锁外壳：防止与 RefreshToken 并发写回半更新 token。
+// NewFilePath 计算 dir 下 uid 对应的凭证文件路径，并确保目录存在。
+// 供面板添加账号时落盘使用（P3）。
+func NewFilePath(dir, uid string) (string, error) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		dir = "./auths"
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, uid+".json"), nil
+}
+
 func (a *Auth) SaveAtomic() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()

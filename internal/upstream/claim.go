@@ -42,7 +42,7 @@ func (c *Client) DailyClaim(a *auth.Auth) (map[string]any, error) {
 		req.Header.Set(k, v)
 	}
 	proxyURL := c.effectiveProxy(proxy)
-	resp, err := c.doWithProxy(proxyURL, req)
+	resp, err := c.doWithProxyControl(proxyURL, req)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (c *Client) Rewards(a *auth.Auth) (map[string]any, error) {
 		req.Header.Set(k, v)
 	}
 	proxyURL := c.effectiveProxy(proxy)
-	resp, err := c.doWithProxy(proxyURL, req)
+	resp, err := c.doWithProxyControl(proxyURL, req)
 	if err != nil {
 		return nil, err
 	}

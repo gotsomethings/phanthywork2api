@@ -283,14 +283,75 @@ func (c *Client) doWithProxy(proxyURL string, req *http.Request) (*http.Response
 	return (&http.Client{Timeout: c.Opts().Timeout, Transport: tr}).Do(req)
 }
 
+// controlTimeout（P4）面板/控制面查询的短超时，避免上游卡顿拖死面板。
+// 可用 P2A_CONTROL_TIMEOUT 覆盖（如 "15s"），默认 20s。
+func (c *Client) controlTimeout() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("P2A_CONTROL_TIMEOUT")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 20 * time.Second
+}
+
+// doWithProxyTimeout 按显式超时发请求。
+func (c *Client) doWithProxyTimeout(proxyURL string, req *http.Request, timeout time.Duration) (*http.Response, error) {
+	if timeout <= 0 {
+		timeout = 20 * time.Second
+	}
+	if strings.TrimSpace(proxyURL) == "" {
+		cl := c.HTTPClient()
+		return (&http.Client{Timeout: timeout, Transport: cl.Transport}).Do(req)
+	}
+	tr, err := transportFor(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	return (&http.Client{Timeout: timeout, Transport: tr}).Do(req)
+}
+
+// doWithProxyControl 与 doWithProxy 相同，但使用控制面短超时（P4）。
+func (c *Client) doWithProxyControl(proxyURL string, req *http.Request) (*http.Response, error) {
+	return c.doWithProxyTimeout(proxyURL, req, c.controlTimeout())
+}
+
+// doControl 读账号代理并发请求，使用控制面短超时。
+// 调用方不得持有 a 锁（否则 ProxyURL 的 RLock 会死锁）。
+func (c *Client) doControl(a *auth.Auth, req *http.Request) (*http.Response, error) {
+	if a == nil {
+		return c.doWithProxyControl(c.Opts().DefaultProxy, req)
+	}
+	return c.doWithProxyControl(c.effectiveProxy(a.ProxyURL()), req)
+}
+
+// doLockedControl 在已持 a 写锁前提下用控制面短超时发请求（不再取锁）。
+func (c *Client) doLockedControl(a *auth.Auth, proxyURL string, req *http.Request) (*http.Response, error) {
+	if a == nil {
+		return c.doWithProxyControl(c.Opts().DefaultProxy, req)
+	}
+	return c.doWithProxyControl(c.effectiveProxy(proxyURL), req)
+}
+
 // do 用账号绑定的代理发请求。
-// 注意：用 ProxyURL（RLock）而非 Lock——本函数可能被已持 a 写锁的方法
-// （如 CreateAPIKey）调用，sync.Mutex 不可重入，否则会自锁死。
+//
+// 重要（P1）：不要在这里调用 a.ProxyURL()。sync.RWMutex 不可重入，
+// 若调用方已持有 a 的写锁（如 CreateAPIKey），再取读锁会永久自锁，
+// 表现为面板/请求卡死。改为由调用方在解锁后传入 proxyURL，
+// 或用 doWithProxy 直接指定。
 func (c *Client) do(a *auth.Auth, req *http.Request) (*http.Response, error) {
 	if a == nil {
 		return c.doWithProxy(c.Opts().DefaultProxy, req)
 	}
 	return c.doWithProxy(c.effectiveProxy(a.ProxyURL()), req)
+}
+
+// doLocked 在已持有 a 写锁的前提下发请求：直接读字段，不再取锁。
+// 调用方必须已持有 a.mu 写锁。
+func (c *Client) doLocked(a *auth.Auth, proxyURL string, req *http.Request) (*http.Response, error) {
+	if a == nil {
+		return c.doWithProxy(c.Opts().DefaultProxy, req)
+	}
+	return c.doWithProxy(c.effectiveProxy(proxyURL), req)
 }
 
 // oauthEnvelope 上游 token/profile 响应统一信封。
@@ -340,7 +401,7 @@ func (c *Client) rawPost(url, contentType string, body []byte, extraHdrs map[str
 	for k, v := range extraHdrs {
 		req.Header.Set(k, v)
 	}
-	resp, err := c.doWithProxy(proxyURL, req)
+	resp, err := c.doWithProxyControl(proxyURL, req)
 	if err != nil {
 		return nil, err
 	}
@@ -384,18 +445,19 @@ func urlQueryEscape(s string) string {
 // RefreshToken 用 refresh_token 换取新 access_token；成功时更新 a 的字段，
 // 调用方负责 SaveAtomic。全程持 a 锁，防止并发 SaveAtomic 读半更新 token。
 func (c *Client) RefreshToken(a *auth.Auth) error {
-	a.Lock()
-	defer a.Unlock()
-	if strings.TrimSpace(a.RefreshToken) == "" {
+	// P2：先快照再发请求（不持锁跨 IO）；刷新成功后在本方法内原子落盘，
+	// 不再依赖调用方是否记得调用 SaveAtomic。
+	rt, proxy, uid := a.RefreshSnapshot()
+	if strings.TrimSpace(rt) == "" {
 		return fmt.Errorf("no refreshToken")
 	}
 	form := map[string]string{
 		"grant_type":    "refresh_token",
-		"refresh_token": a.RefreshToken,
+		"refresh_token": rt,
 		"client_id":     c.ClientID,
 	}
 	extra := map[string]string{"anthropic-beta": c.OAuthBetaHeader}
-	m, err := c.formPost(c.OAuthTokenURL, form, extra, c.effectiveProxy(a.Proxy))
+	m, err := c.formPost(c.OAuthTokenURL, form, extra, c.effectiveProxy(proxy))
 	if err != nil {
 		return err
 	}
@@ -403,12 +465,14 @@ func (c *Client) RefreshToken(a *auth.Auth) error {
 	if token == "" {
 		return &Error{Kind: ErrSessionDead, Status: 0, Msg: "refresh_failed: no access_token in response — re-login required"}
 	}
-	a.AccessToken = token
-	if rt, ok := m["refresh_token"].(string); ok && rt != "" {
-		a.RefreshToken = rt
-	}
+	newRT, _ := m["refresh_token"].(string)
+	var expAt int64
 	if exp, ok := toInt64(m["expires_in"]); ok && exp > 0 {
-		a.ExpiresAt = time.Now().Add(time.Duration(exp) * time.Second).Unix()
+		expAt = time.Now().Add(time.Duration(exp) * time.Second).Unix()
+	}
+	// P2：刷新成功即原子落盘到 auths/，根治重启后账号失效。
+	if err := a.ApplyRefresh(token, newRT, expAt); err != nil {
+		log.Printf("refresh: atomic save failed uid=%s: %v", uid, err)
 	}
 	return nil
 }
@@ -433,7 +497,10 @@ func (c *Client) CreateAPIKey(a *auth.Auth) (string, error) {
 	for k, v := range o.ExtraHeaders {
 		req.Header.Set(k, v)
 	}
-	resp, err := c.do(a, req)
+	// P1：此处持写锁，必须用 doLockedControl 并直接传代理，
+	// 不能再走 do()（它会取读锁 → 自锁死锁 → 面板卡死）。
+	// P4：控制面短超时，避免上游卡死拖死面板。
+	resp, err := c.doLockedControl(a, a.Proxy, req)
 	if err != nil {
 		return "", err
 	}
@@ -547,7 +614,7 @@ func (c *Client) FetchProfile(a *auth.Auth) (map[string]any, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", o.UserAgent)
-	resp, err := c.do(a, req)
+	resp, err := c.doControl(a, req)
 	if err != nil {
 		return nil, err
 	}
