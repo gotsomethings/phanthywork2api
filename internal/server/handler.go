@@ -157,6 +157,9 @@ func (h *Handler) models(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Models 导出静态模型列表，供控制面板兼容层复用。
+func Models() []map[string]any { return staticModels }
+
 func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 	if err != nil {

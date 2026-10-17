@@ -3,6 +3,24 @@
 本项目所有重要变更都记录于此。
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.2.0] - 2026-10-18
+
+### 新增
+- **控制台改用 cli2api 前端**：直接复用 CLI2API 的 React + HeroUI 界面构建产物，
+  外观与操作与原项目一致；新增 `internal/cliui` 兼容层，按 cli2api 的 HTTP 契约
+  输出本服务的真实数据（账号池、模型、接入参数、运行时）
+- 前端工程并入仓库 `frontend/`，`npm run build` 后将产物同步到
+  `internal/webui/static/` 并由 `go:embed` 内嵌，保持单二进制交付
+- 控制台路由：`/` 为 SPA（含 `/login` `/accounts` `/providers` `/access` `/logs` `/keys` `/system`），
+  `/api/*` 为兼容接口，原有 `/admin/*` 面板保留
+- 未配置 `api_key` 时自动预填占位密钥，控制台不再卡在登录页
+
+### 说明
+- 前端基于 [cli2api](https://github.com/caigee-cmd/cli2api)（MIT License，Copyright (c) 2026 caigee-cmd），
+  许可声明保留于 `frontend/LICENSE`
+- Providers / Keys / 请求日志等页面对应后端能力本服务尚未提供（多渠道、多密钥、请求日志存储），
+  接口返回空集以保证界面可用；模型列表与账号操作均为真实数据
+
 ## [1.1.0] - 2026-10-18
 
 ### 新增

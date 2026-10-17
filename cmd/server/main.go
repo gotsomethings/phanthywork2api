@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -19,11 +20,13 @@ import (
 	"phanthycode2api/internal/admin"
 	"phanthycode2api/internal/auth"
 	"phanthycode2api/internal/claims"
+	"phanthycode2api/internal/cliui"
 	"phanthycode2api/internal/conf"
 	"phanthycode2api/internal/pool"
 	"phanthycode2api/internal/scheduler"
 	"phanthycode2api/internal/server"
 	"phanthycode2api/internal/upstream"
+	"phanthycode2api/internal/webui"
 )
 
 func main() {
@@ -96,30 +99,78 @@ func main() {
 		},
 	})
 
+	// P3：新账号落盘后入池并应用当前代理（面板与兼容层共用）。
+	addAccount := func(a *auth.Auth) {
+		p.Add(a)
+		authsMu.Lock()
+		auths = append(auths, a)
+		authsMu.Unlock()
+		applyProxiesLocked(mgr.Get())
+	}
+
 	adm := admin.New(admin.Config{
-		Manager:  mgr,
-		Pool:     p,
-		Upstream: up,
-		Claims:   claimStore,
-		ClaimNow: func() { go sch.RunClaimNow() },
-		APIKey:   cfg.APIKey,
-		Version:  version,
-		AuthDir:  cfg.AuthDir,
-		// P3：面板添加账号后，新账号立即入池并应用当前代理配置。
-		OnAccountAdded: func(a *auth.Auth) {
-			p.Add(a)
-			authsMu.Lock()
-			auths = append(auths, a)
-			authsMu.Unlock()
-			applyProxiesLocked(mgr.Get())
-		},
+		Manager:        mgr,
+		Pool:           p,
+		Upstream:       up,
+		Claims:         claimStore,
+		ClaimNow:       func() { go sch.RunClaimNow() },
+		APIKey:         cfg.APIKey,
+		Version:        version,
+		AuthDir:        cfg.AuthDir,
+		OnAccountAdded: addAccount,
 	})
 
-	// 面板与主 API 共用一个端口：/admin/* 走面板，其余走 OpenAI 兼容接口
+	// cli2api 控制台兼容层：同一份前端界面，数据来自本服务。
+	cli := cliui.New(cliui.Config{
+		Manager:          mgr,
+		Pool:             p,
+		Upstream:         up,
+		Claims:           claimStore,
+		APIKey:           cfg.APIKey,
+		Version:          version,
+		AuthDir:          cfg.AuthDir,
+		OnAccountAdded:   addAccount,
+		OnAccountUpdated: func() { applyProxiesLocked(mgr.Get()) },
+	})
+
+	// 面板与主 API 共用端口：
+	//   /api/*    → cli2api 兼容层（控制台数据）
+	//   /admin/*  → 原内置面板（保留）
+	//   /v1/*     → OpenAI/Anthropic 兼容接口
+	//   /         → 控制台 SPA（cli2api 前端）
 	root := http.NewServeMux()
 	root.Handle("/admin/", adm)
 	root.Handle("/admin", http.RedirectHandler("/admin/", http.StatusFound))
-	root.Handle("/", h)
+	root.Handle("/api/", cli)
+	root.Handle("/health", h)
+	root.Handle("/healthz", h)
+	root.Handle("/v1/", h)
+
+	// 控制台 SPA（cli2api 前端构建产物）
+	spa := webui.Handler()
+	root.Handle("/assets/", spa)
+	for _, p := range []string{"/favicon.svg", "/favicon-dark.svg", "/apple-touch-icon.svg", "/og-card.svg", "/site.webmanifest"} {
+		root.Handle(p, spa)
+	}
+	root.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" && !isSPARoute(r.URL.Path) {
+			http.NotFound(w, r)
+			return
+		}
+		page, err := webui.IndexHTML()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// 未启用鉴权时预填占位 key，避免控制台卡在登录页。
+		if cfg.APIKey == "" {
+			page = bytes.Replace(page, []byte("</body>"),
+				[]byte("<script>try{localStorage.setItem('cli2api_key','no-auth')}catch(e){}</script></body>"), 1)
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(page)
+	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -151,6 +202,15 @@ func main() {
 
 // version 构建版本（可用 -ldflags "-X main.version=x.y.z" 覆盖）。
 var version = "1.1.0"
+
+// isSPARoute 判断是否为控制台前端路由（由 SPA 接管）。
+func isSPARoute(p string) bool {
+	switch p {
+	case "/login", "/accounts", "/providers", "/access", "/logs", "/keys", "/system", "/checkins":
+		return true
+	}
+	return false
+}
 
 // applyConfig 把配置应用到各组件（启动时与热更新时共用）。
 func applyConfig(c *conf.Config, p *pool.Pool, up *upstream.Client, sch *scheduler.Scheduler, auths []*auth.Auth, applyProxiesFn func(*conf.Config)) {

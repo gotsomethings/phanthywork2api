@@ -79,7 +79,7 @@ func (c *Client) StartLogin() (string, string, error) {
 // ExchangeLogin 用 state 找回 verifier，用 code 换取 token + api_key，
 // 构造 *auth.Auth 并原子落盘 auths/<uid>.json。
 // code 支持裸 code 或完整回调 URL；proxy 可为空（走全局默认）。
-func (c *Client) ExchangeLogin(state, code, authDir, proxy, nickname string) (*auth.Auth, error) {
+func (c *Client) ExchangeLogin(state, code, authDir, proxy, nickname, uid string) (*auth.Auth, error) {
 	code = extractOAuthCode(code)
 	if code == "" {
 		return nil, fmt.Errorf("empty authorization code")
@@ -107,7 +107,10 @@ func (c *Client) ExchangeLogin(state, code, authDir, proxy, nickname string) (*a
 		apiKey = ""
 	}
 
-	uid := fmt.Sprintf("phanthy-%d", time.Now().Unix())
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
+		uid = fmt.Sprintf("phanthy-%d", time.Now().Unix())
+	}
 	if strings.TrimSpace(nickname) == "" {
 		nickname = "phanthy-" + time.Now().Format("0102")
 	}

@@ -614,7 +614,7 @@ func (a *Admin) accountLoginExchange(w http.ResponseWriter, r *http.Request) {
 		authDir = a.cfg.Manager.Get().AuthDir
 	}
 
-	acct, err := a.cfg.Upstream.ExchangeLogin(payload.State, payload.Code, authDir, payload.Proxy, payload.Nickname)
+	acct, err := a.cfg.Upstream.ExchangeLogin(payload.State, payload.Code, authDir, payload.Proxy, payload.Nickname, "")
 	if err != nil {
 		log.Printf("admin: login exchange failed: %v", err)
 		writeJSON(w, http.StatusBadGateway, map[string]any{
